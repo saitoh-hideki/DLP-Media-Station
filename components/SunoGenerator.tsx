@@ -150,9 +150,24 @@ export default function SunoGenerator({ onGenerated }: SunoGeneratorProps) {
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {result.prompt_en}
-              </p>
+              
+              <div className="space-y-3">
+                <div>
+                  <h5 className="text-xs font-medium text-gray-600 mb-1">英語プロンプト</h5>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {result.prompt_en}
+                  </p>
+                </div>
+                
+                {result.prompt_ja && (
+                  <div>
+                    <h5 className="text-xs font-medium text-gray-600 mb-1">日本語訳</h5>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      {result.prompt_ja}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="bg-gray-50 p-4 rounded-lg">

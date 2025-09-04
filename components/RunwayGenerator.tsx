@@ -173,9 +173,24 @@ export default function RunwayGenerator({ onGenerated }: RunwayGeneratorProps) {
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-sm text-gray-700 leading-relaxed">
-                    {scene.prompt_en}
-                  </p>
+                  
+                  <div className="space-y-2">
+                    <div>
+                      <h5 className="text-xs font-medium text-gray-600 mb-1">英語プロンプト</h5>
+                      <p className="text-sm text-gray-700 leading-relaxed">
+                        {scene.prompt_en}
+                      </p>
+                    </div>
+                    
+                    {scene.prompt_ja && (
+                      <div>
+                        <h5 className="text-xs font-medium text-gray-600 mb-1">日本語訳</h5>
+                        <p className="text-sm text-gray-600 leading-relaxed">
+                          {scene.prompt_ja}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

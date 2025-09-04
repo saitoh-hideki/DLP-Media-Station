@@ -143,11 +143,28 @@ export default function NarrationGenerator({ onGenerated }: NarrationGeneratorPr
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
-              {result.narration.map((line: string, index: number) => (
-                <p key={index} className="text-sm">
-                  {index + 1}. {line}
-                </p>
-              ))}
+              
+              <div className="space-y-3">
+                <div>
+                  <h5 className="text-xs font-medium text-gray-600 mb-1">日本語ナレーション</h5>
+                  {result.narration.map((line: string, index: number) => (
+                    <p key={index} className="text-sm">
+                      {index + 1}. {line}
+                    </p>
+                  ))}
+                </div>
+                
+                {result.narration_en && (
+                  <div>
+                    <h5 className="text-xs font-medium text-gray-600 mb-1">英語ナレーション</h5>
+                    {result.narration_en.map((line: string, index: number) => (
+                      <p key={index} className="text-sm text-gray-600">
+                        {index + 1}. {line}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="text-xs text-gray-500">
