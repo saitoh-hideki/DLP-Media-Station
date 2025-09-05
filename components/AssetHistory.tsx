@@ -54,7 +54,7 @@ export default function AssetHistory() {
     }
   }
 
-  const copyToClipboard = (content: any) => {
+  const copyToClipboard = (content: unknown) => {
     const text = JSON.stringify(content, null, 2)
     navigator.clipboard.writeText(text)
   }
@@ -99,7 +99,7 @@ export default function AssetHistory() {
   const renderContent = (asset: GeneratedAsset) => {
     const content = asset.content
 
-    if (asset.type === 'narration' && content.narration) {
+    if (asset.type === 'narration' && 'narration' in content && content.narration) {
       return (
         <div className="space-y-1">
           {content.narration.map((line: string, i: number) => (
@@ -109,10 +109,10 @@ export default function AssetHistory() {
       )
     }
 
-    if (asset.type === 'runway' && content.scenes) {
+    if (asset.type === 'runway' && 'scenes' in content && content.scenes) {
       return (
         <div className="space-y-2">
-          {content.scenes.map((scene: any, i: number) => (
+          {content.scenes.map((scene: { label: string; seconds: number }, i: number) => (
             <div key={i} className="text-sm">
               <span className="font-medium">{scene.label}</span>
               <span className="text-gray-500 ml-1">({scene.seconds}秒)</span>
@@ -122,7 +122,7 @@ export default function AssetHistory() {
       )
     }
 
-    if (asset.type === 'suno' && content.prompt_en) {
+    if (asset.type === 'suno' && 'prompt_en' in content && content.prompt_en) {
       return (
         <p className="text-sm text-gray-700 line-clamp-3">
           {content.prompt_en}

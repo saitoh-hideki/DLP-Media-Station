@@ -53,8 +53,8 @@ export default function SunoGenerator({ onGenerated }: SunoGeneratorProps) {
       if (dbError) throw dbError
       
       onGenerated()
-    } catch (err: any) {
-      setError(err.message || 'エラーが発生しました')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'エラーが発生しました')
     } finally {
       setLoading(false)
     }
@@ -159,14 +159,6 @@ export default function SunoGenerator({ onGenerated }: SunoGeneratorProps) {
                   </p>
                 </div>
                 
-                {result.prompt_ja && (
-                  <div>
-                    <h5 className="text-xs font-medium text-gray-600 mb-1">日本語訳</h5>
-                    <p className="text-sm text-gray-600 leading-relaxed">
-                      {result.prompt_ja}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
 

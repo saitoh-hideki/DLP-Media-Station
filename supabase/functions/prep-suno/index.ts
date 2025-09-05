@@ -1,5 +1,14 @@
+// @ts-ignore - Deno環境でのインポート
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-ignore - Deno環境でのインポート
 import { corsHeaders } from "../_shared/cors.ts"
+
+// Deno環境の型定義
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 const PLATFORM_BPM = {
   instagram: { min: 88, max: 92 },
@@ -15,7 +24,7 @@ const VIBE_STYLES = {
   electronic: ['electronic', 'instrumental', 'chill', 'modern', 'ambient', 'downtempo']
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -108,7 +117,7 @@ Return as JSON:
     )
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { 
         headers: { 
           ...corsHeaders, 

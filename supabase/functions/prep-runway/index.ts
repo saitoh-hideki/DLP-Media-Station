@@ -1,6 +1,15 @@
 // supabase/functions/prep-runway/index.ts
+// @ts-ignore - Deno環境でのインポート
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-ignore - Deno環境でのインポート
 import { corsHeaders } from "../_shared/cors.ts";
+
+// Deno環境の型定義
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 // --- Platform presets (既存) ---
 const PLATFORM_CONFIG = {
@@ -9,6 +18,67 @@ const PLATFORM_CONFIG = {
   shorts:    { aspect: "9:16", duration: 20, scenes: 4, distribution: [3, 5, 6, 6] },
   tv:        { aspect: "16:9", duration: 15, scenes: 3, distribution: [3, 7, 5] }
 } as const;
+
+// --- 新しい型定義 ---
+type VisualMode = 'live_action' | 'anime';
+
+interface CameraSpec {
+  shot_size: 'CU' | 'MCU' | 'MS' | 'FS' | 'WS';
+  angle: 'eye' | 'high' | 'low' | 'top';
+  movement: Array<'pan' | 'tilt' | 'dolly' | 'track' | 'handheld' | 'gimbal' | 'locked'>;
+  zoom: 'in' | 'out' | 'none';
+}
+
+interface LiveActionSpec {
+  lens: '24mm' | '35mm' | '50mm' | '85mm' | 'macro';
+  depth_of_field: 'shallow' | 'medium' | 'deep';
+  camera_motion: 'locked_off' | 'tripod' | 'handheld' | 'gimbal';
+}
+
+interface AnimeSpec {
+  line_weight: 'thin' | 'medium' | 'bold';
+  shading: 'flat' | 'soft' | 'hard';
+  texture: 'clean' | 'film_grain' | 'paper';
+  frame_rate: 'cinematic_24' | 'smooth_30';
+}
+
+interface ColorPalette {
+  primary: string;
+  secondary: string;
+  accents: string[];
+}
+
+interface StyleGuide {
+  style_id: string;
+  characters: Array<{
+    id: string;
+    name?: string;
+    age?: string;
+    gender?: string;
+    look_en?: string;
+    look_ja?: string;
+    wardrobe_en?: string;
+    wardrobe_ja?: string;
+  }>;
+  locations: Array<{
+    id: string;
+    name?: string;
+    look_en?: string;
+    look_ja?: string;
+  }>;
+  palette: ColorPalette;
+  camera_lens: string;
+  lighting_en: string;
+  lighting_ja: string;
+  anime?: AnimeSpec;
+  live?: LiveActionSpec;
+}
+
+interface SceneInput {
+  label: string;
+  key_points: string;
+  seconds: number;
+}
 
 // --- Consistency & safety ---
 const FIXED_VOCAB =
@@ -61,7 +131,69 @@ function injectAnchors(scenePrompt: string, anchor: string) {
   return has ? scenePrompt : `${scenePrompt} ${anchor}`;
 }
 
-serve(async (req) => {
+// 否定語彙を生成する関数
+function generateNegativePrompts(mode: VisualMode): string[] {
+  const common = [
+    'no text overlays',
+    'no watermarks',
+    'no logos',
+    'no brand names',
+    'no written text',
+    'no subtitles',
+    'no captions'
+  ];
+  
+  const modeSpecific = mode === 'live_action' ? [
+    'no CGI look',
+    'no cartoonish outlines',
+    'no anime style',
+    'no illustrated look',
+    'no hand-drawn appearance',
+    'no cel shading',
+    'no flat colors'
+  ] : [
+    'no messy linework',
+    'no muddy colors',
+    'no realistic photography',
+    'no photorealistic style',
+    'no live action footage',
+    'no documentary style',
+    'no shaky camera'
+  ];
+  
+  return [...common, ...modeSpecific];
+}
+
+// 否定語彙を日本語に翻訳する関数
+function translateNegatives(negatives: string[]): string[] {
+  const translations: Record<string, string> = {
+    'no text overlays': 'テキストオーバーレイなし',
+    'no watermarks': 'ウォーターマークなし',
+    'no logos': 'ロゴなし',
+    'no brand names': 'ブランド名なし',
+    'no written text': '文字なし',
+    'no subtitles': '字幕なし',
+    'no captions': 'キャプションなし',
+    'no CGI look': 'CGI風の見た目なし',
+    'no cartoonish outlines': 'カートゥーン風の輪郭なし',
+    'no anime style': 'アニメ風なし',
+    'no illustrated look': 'イラスト風なし',
+    'no hand-drawn appearance': '手描き風なし',
+    'no cel shading': 'セルシェーディングなし',
+    'no flat colors': 'フラットな色なし',
+    'no messy linework': '乱雑な線画なし',
+    'no muddy colors': '濁った色なし',
+    'no realistic photography': 'リアルな写真なし',
+    'no photorealistic style': 'フォトリアル風なし',
+    'no live action footage': '実写映像なし',
+    'no documentary style': 'ドキュメンタリー風なし',
+    'no shaky camera': '手ブレなし'
+  };
+  
+  return negatives.map(neg => translations[neg] || neg);
+}
+
+serve(async (req: Request) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -73,8 +205,12 @@ serve(async (req) => {
       shopName,
       platform = "youtube",
       vibe = "jazz",
-      // 任意: 既存のスタイルガイドで強制一貫性
-      styleGuide //: StyleGuideInput | undefined
+      mode = "live_action",
+      camera,
+      styleGuide,
+      distribution,
+      scenes,
+      seed
     } = body ?? {};
 
     if (!shopName) throw new Error("shopName is required");
@@ -186,7 +322,7 @@ Rules:
 
     // ---- 事後バリデーション＆不足項目の補完 ----
     // 1) scenes の長さ・ラベル・秒数を配分に合わせて補正
-    const scenes = Array.isArray(content.scenes) ? content.scenes : [];
+    const contentScenes = Array.isArray(content.scenes) ? content.scenes : [];
     const fixedScenes = config.distribution.map((sec: number, i: number) => {
       const fallback = {
         label: labels[i] ?? `S${i + 1}`,
@@ -194,7 +330,7 @@ Rules:
         prompt_en: "",
         prompt_ja: ""
       };
-      const s = scenes[i] ?? fallback;
+      const s = contentScenes[i] ?? fallback;
 
       // ラベル/秒数の強制
       s.label = labels[i] ?? s.label ?? `S${i + 1}`;
@@ -256,6 +392,10 @@ Rules:
       }];
     }
 
+    // 否定語彙を生成
+    const negative_en = generateNegativePrompts(mode);
+    const negative_ja = translateNegatives(negative_en);
+
     const output = {
       meta: {
         platform,
@@ -263,12 +403,17 @@ Rules:
         duration: config.duration,
         distribution: config.distribution,
         shopName,
-        vibe
+        vibe,
+        mode,
+        seed,
+        model_version: 'gen-3'
       },
       style_guide: sg,
       anchor_en: content.anchor_en ?? "consistent look: same barista CHAR_A at LOC_A with brand palette.",
       anchor_ja: content.anchor_ja ?? "一貫性: CHAR_A（同じバリスタ）とLOC_A（同じ店舗）とブランド配色を維持。",
-      scenes: fixedScenes
+      scenes: fixedScenes,
+      negative_en,
+      negative_ja
     };
 
     return new Response(JSON.stringify(output), {

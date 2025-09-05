@@ -1,5 +1,14 @@
+// @ts-ignore - Deno環境でのインポート
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-ignore - Deno環境でのインポート
 import { corsHeaders } from "../_shared/cors.ts"
+
+// Deno環境の型定義
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 const PLATFORM_CONFIG = {
   instagram: { lines: 4, maxChars: 30 },
@@ -8,7 +17,7 @@ const PLATFORM_CONFIG = {
   tv: { lines: 4, maxChars: 35 }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -101,7 +110,7 @@ serve(async (req) => {
     )
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: (error as Error).message }),
       { 
         headers: { 
           ...corsHeaders, 

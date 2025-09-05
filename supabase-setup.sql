@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS public.generated_assets (
   updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+-- 新しいカラムを追加（既存テーブルがある場合）
+ALTER TABLE public.generated_assets 
+  ADD COLUMN IF NOT EXISTS mode TEXT CHECK (mode IN ('live_action','anime')) DEFAULT 'live_action',
+  ADD COLUMN IF NOT EXISTS model_version TEXT,
+  ADD COLUMN IF NOT EXISTS seed TEXT;
+
 -- インデックス作成
 CREATE INDEX IF NOT EXISTS idx_generated_assets_shop_name ON public.generated_assets(shop_name);
 CREATE INDEX IF NOT EXISTS idx_generated_assets_platform ON public.generated_assets(platform);

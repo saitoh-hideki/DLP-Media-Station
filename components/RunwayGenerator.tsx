@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { supabase, type RunwayContent } from '@/lib/supabase'
 import { useCMConfig } from './CMConfig'
 import { Button } from './ui/button'
-import { Input } from './ui/input'
 import { Label } from './ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
@@ -72,9 +71,9 @@ export default function RunwayGenerator({ onGenerated }: RunwayGeneratorProps) {
       }
       
       onGenerated()
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Generate error:', err)
-      setError(err.message || 'エラーが発生しました')
+      setError((err as Error).message || 'エラーが発生しました')
     } finally {
       setLoading(false)
     }
@@ -238,7 +237,7 @@ export default function RunwayGenerator({ onGenerated }: RunwayGeneratorProps) {
             )}
 
             <div className="space-y-3">
-              {result.scenes.map((scene: any, index: number) => (
+              {result.scenes.map((scene: { label: string; seconds: number; prompt_en: string; prompt_ja: string }, index: number) => (
                 <div key={index} className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex items-start justify-between mb-2">
                     <div>

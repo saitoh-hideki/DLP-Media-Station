@@ -1,11 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CMConfigProvider, CMConfigPanel } from '@/components/CMConfig'
 import NarrationGenerator from '@/components/NarrationGenerator'
-import RunwayGenerator from '@/components/RunwayGenerator'
+import RunwayGeneratorV2 from '@/components/RunwayGeneratorV2'
 import SunoGenerator from '@/components/SunoGenerator'
 import AssetHistory from '@/components/AssetHistory'
 
@@ -38,7 +37,7 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="runway">
-            <RunwayGenerator onGenerated={() => setRefreshHistory(prev => prev + 1)} />
+            <RunwayGeneratorV2 onGenerated={() => setRefreshHistory(prev => prev + 1)} />
           </TabsContent>
 
           <TabsContent value="suno">

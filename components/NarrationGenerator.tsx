@@ -6,7 +6,6 @@ import { useCMConfig } from './CMConfig'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Loader2, Copy, Settings } from 'lucide-react'
 
@@ -54,8 +53,8 @@ export default function NarrationGenerator({ onGenerated }: NarrationGeneratorPr
       if (dbError) throw dbError
       
       onGenerated()
-    } catch (err: any) {
-      setError(err.message || 'エラーが発生しました')
+    } catch (err: unknown) {
+      setError((err as Error).message || 'エラーが発生しました')
     } finally {
       setLoading(false)
     }
@@ -154,16 +153,6 @@ export default function NarrationGenerator({ onGenerated }: NarrationGeneratorPr
                   ))}
                 </div>
                 
-                {result.narration_en && (
-                  <div>
-                    <h5 className="text-xs font-medium text-gray-600 mb-1">英語ナレーション</h5>
-                    {result.narration_en.map((line: string, index: number) => (
-                      <p key={index} className="text-sm text-gray-600">
-                        {index + 1}. {line}
-                      </p>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
