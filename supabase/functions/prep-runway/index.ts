@@ -1,126 +1,284 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { corsHeaders } from "../_shared/cors.ts"
+// supabase/functions/prep-runway/index.ts
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
+// --- Platform presets (既存) ---
 const PLATFORM_CONFIG = {
-  instagram: { aspect: '9:16', duration: 18, scenes: 4, distribution: [3, 5, 6, 4] },
-  youtube: { aspect: '16:9', duration: 30, scenes: 5, distribution: [4, 5, 6, 7, 3] },
-  shorts: { aspect: '9:16', duration: 20, scenes: 4, distribution: [3, 5, 6, 6] },
-  tv: { aspect: '16:9', duration: 15, scenes: 3, distribution: [3, 7, 5] }
+  instagram: { aspect: "9:16", duration: 18, scenes: 4, distribution: [3, 5, 6, 4] },
+  youtube:   { aspect: "16:9", duration: 30, scenes: 5, distribution: [4, 5, 6, 7, 3] },
+  shorts:    { aspect: "9:16", duration: 20, scenes: 4, distribution: [3, 5, 6, 6] },
+  tv:        { aspect: "16:9", duration: 15, scenes: 3, distribution: [3, 7, 5] }
+} as const;
+
+// --- Consistency & safety ---
+const FIXED_VOCAB =
+  "cinematic, warm soft lighting, shallow depth of field, 50mm lens look, gentle pan or gentle push-in, golden hour, subtle film grain, natural light";
+const NEGATIVE_PROMPT = "no street food cart, no tea house, no retro diner";
+
+// シーンのラベル（配信先別の標準順序）
+const DEFAULT_LABELS: Record<string, string[]> = {
+  instagram: ["S1-hook", "S2-barista", "S3-smile", "S4-logo"],
+  shorts:    ["S1-hook", "S2-barista", "S3-smile", "S4-logo"],
+  youtube:   ["S1-opening", "S2-barista", "S3-guests", "S4-ambience", "S5-logo"],
+  tv:        ["S1-opening", "S2-core", "S3-logo"]
+};
+
+type StyleGuideInput = {
+  style_id?: string;
+  characters?: Array<{
+    id: string; // "CHAR_A" など
+    name?: string;
+    age?: string;
+    gender?: string;
+    look_en?: string;
+    look_ja?: string;
+    wardrobe_en?: string;
+    wardrobe_ja?: string;
+  }>;
+  locations?: Array<{
+    id: string; // "LOC_A"
+    name?: string;
+    look_en?: string;
+    look_ja?: string;
+  }>;
+  palette?: {
+    primary?: string;     // "#C19A6B"等
+    secondary?: string;
+    accents?: string[];   // ["#..."]
+  };
+  camera_lens?: string;    // "50mm"
+  lighting_en?: string;    // "warm soft lighting, golden hour"
+  lighting_ja?: string;
+};
+
+function ensureTrailing(sentence: string, tail: string) {
+  const has = sentence.toLowerCase().includes(tail.toLowerCase());
+  return has ? sentence : (sentence.endsWith(".") ? `${sentence} ${tail}` : `${sentence}; ${tail}`);
 }
 
-const FIXED_VOCAB = 'cinematic, warm soft lighting, shallow depth of field, 50mm lens look, gentle pan/push-in, golden hour, subtle film grain, natural light'
-const NEGATIVE_PROMPT = 'no street food cart, no tea house, no retro diner'
+function injectAnchors(scenePrompt: string, anchor: string) {
+  const has = scenePrompt.toLowerCase().includes(anchor.toLowerCase());
+  return has ? scenePrompt : `${scenePrompt} ${anchor}`;
+}
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { shopName, platform = 'youtube', vibe = 'jazz' } = await req.json()
+    const body = await req.json();
+    const {
+      shopName,
+      platform = "youtube",
+      vibe = "jazz",
+      // 任意: 既存のスタイルガイドで強制一貫性
+      styleGuide //: StyleGuideInput | undefined
+    } = body ?? {};
 
-    if (!shopName) {
-      throw new Error('shopName is required')
-    }
+    if (!shopName) throw new Error("shopName is required");
 
-    const config = PLATFORM_CONFIG[platform as keyof typeof PLATFORM_CONFIG] || PLATFORM_CONFIG.youtube
-    
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
-    if (!openaiApiKey) {
-      throw new Error('OPENAI_API_KEY is not configured')
-    }
+    const config = (PLATFORM_CONFIG as any)[platform] || PLATFORM_CONFIG.youtube;
+    const labels = DEFAULT_LABELS[platform] || DEFAULT_LABELS.youtube;
 
-    const prompt = `
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    if (!openaiApiKey) throw new Error("OPENAI_API_KEY is not configured");
+
+    // LLM への要求：英語プロンプト＋日本語訳、スタイルガイド生成/反映、秒配分を固定
+    const system = `
 You are a professional video prompt creator for Runway Gen-3.
-Create ${config.scenes} scene prompts for a ${shopName} commercial.
+Always respond with VALID JSON ONLY that matches the requested schema. 
+Every scene prompt MUST be copy-ready for Runway and must maintain visual consistency across scenes.
+`;
 
-Platform: ${platform}
-Aspect Ratio: ${config.aspect}
-Total Duration: ${config.duration} seconds
-Scene Distribution: ${config.distribution.join(', ')} seconds
+    const user = `
+Goal: Create ${config.scenes} scene prompts for a ${shopName} commercial optimized for ${platform}.
+Aspect: ${config.aspect}
+Total duration: ${config.duration}s
+Scene distribution (seconds): ${config.distribution.join(", ")}
 Vibe: ${vibe}
 
-Rules:
-1. Each prompt must include: "${FIXED_VOCAB}"
-2. Each prompt must end with: "${NEGATIVE_PROMPT}"
-3. Scene types should vary: exterior, barista action, customer interaction, logo
-4. Keep prompts under 150 words each
-5. Include duration hint like (~3s) at the end
+Fixed vocab (must appear in EVERY scene):
+"${FIXED_VOCAB}"
 
-Platform-specific guidelines:
-- instagram: Hook in first 3 seconds, vertical framing emphasis
-- youtube: Storytelling flow, establish-develop-resolve
-- shorts: Fast-paced, visually striking moments
-- tv: Brand-focused, polished, memorable closing
+Negative clause (must appear at end of EVERY scene):
+"${NEGATIVE_PROMPT}"
 
-Return as JSON:
+Platform-specific intent:
+- instagram/shorts: hook in first 3s, fast-paced, strong visual
+- youtube: story flow (establish → develop → resolve)
+- tv: brand-focused, clean, memorable close
+
+Consistency requirements:
+- Use the SAME character(s), SAME location, SAME palette, SAME camera lens, SAME lighting wording across ALL scenes.
+- Keep names/age/wardrobe consistent. Do not change hair color or outfit.
+- Include a short "anchor_en" and "anchor_ja" that, when appended to each scene prompt, helps keep consistency (character + location + palette in one clause).
+
+If a style guide is provided, use it verbatim. If not, generate a concise style guide.
+
+${
+  styleGuide
+    ? `Provided styleGuide (use as-is):
+${JSON.stringify(styleGuide)}`
+    : "No external style guide provided. Generate one for a modern cozy coffee shop."
+}
+
+Return JSON EXACTLY in this shape:
 {
+  "style_guide": {
+    "style_id": "string",
+    "characters": [{"id":"CHAR_A","name":"string","age":"string","gender":"string","look_en":"string","look_ja":"string","wardrobe_en":"string","wardrobe_ja":"string"}],
+    "locations": [{"id":"LOC_A","name":"string","look_en":"string","look_ja":"string"}],
+    "palette": {"primary":"#hex","secondary":"#hex","accents":["#hex"]},
+    "camera_lens": "50mm",
+    "lighting_en": "warm soft lighting, golden hour",
+    "lighting_ja": "日本語の説明"
+  },
+  "anchor_en": "single short clause to append for consistency (character + location + palette)",
+  "anchor_ja": "上記anchor_enの日本語版（短い一文）",
   "scenes": [
     {
-      "label": "S1-hook",
-      "seconds": 3,
-      "prompt_en": "..."
+      "label": "${labels[0]}",
+      "seconds": ${config.distribution[0]},
+      "prompt_en": "one-line English prompt ending with (~${config.distribution[0]}s)",
+      "prompt_ja": "上記の日本語訳（同じ意味）"
     }
+    // ... repeat for remaining scenes (labels, seconds from distribution)
   ]
 }
-`
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
+Rules:
+- Each "prompt_en" must be ONE sentence (<= 150 words), explicitly mention "modern cozy coffee shop interior or exterior", include the fixed vocab, and end with the negative clause + "(~Ns)".
+- Each "prompt_ja" is a faithful Japanese translation of "prompt_en".
+- DO NOT include any extra keys or comments.
+`;
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${openaiApiKey}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
+        model: "gpt-4o-mini", // 安定してJSON返す軽量モデル。必要なら gpt-4o に変更可
         messages: [
-          { role: 'system', content: 'You are a professional video prompt creator. Always respond in valid JSON format.' },
-          { role: 'user', content: prompt }
+          { role: "system", content: system },
+          { role: "user", content: user }
         ],
-        temperature: 0.7,
-        max_tokens: 1000,
+        temperature: 0.6,
         response_format: { type: "json_object" }
-      }),
-    })
+      })
+    });
 
     if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`OpenAI API error: ${error}`)
+      const errorText = await response.text();
+      throw new Error(`OpenAI API error: ${errorText}`);
     }
 
-    const data = await response.json()
-    const result = JSON.parse(data.choices[0].message.content)
+    const data = await response.json();
+    let content: any;
+    try {
+      content = JSON.parse(data.choices?.[0]?.message?.content ?? "{}");
+    } catch {
+      throw new Error("Failed to parse JSON from OpenAI");
+    }
+
+    // ---- 事後バリデーション＆不足項目の補完 ----
+    // 1) scenes の長さ・ラベル・秒数を配分に合わせて補正
+    const scenes = Array.isArray(content.scenes) ? content.scenes : [];
+    const fixedScenes = config.distribution.map((sec: number, i: number) => {
+      const fallback = {
+        label: labels[i] ?? `S${i + 1}`,
+        seconds: sec,
+        prompt_en: "",
+        prompt_ja: ""
+      };
+      const s = scenes[i] ?? fallback;
+
+      // ラベル/秒数の強制
+      s.label = labels[i] ?? s.label ?? `S${i + 1}`;
+      s.seconds = sec;
+
+      // プロンプト末尾にネガティブ指定・(~Ns)・固定語彙・アンカーを保証
+      const anchor_en: string = content.anchor_en ?? "";
+      const needNs = `(~${sec}s)`;
+
+      let pen = (s.prompt_en ?? "").trim();
+      // 固定語彙
+      if (!pen.toLowerCase().includes("warm soft lighting")) {
+        pen = `${pen}${pen ? " " : ""}${FIXED_VOCAB}.`;
+      }
+      // (~Ns)
+      if (!pen.includes(needNs)) pen = `${pen} ${needNs}`;
+      // negative
+      pen = ensureTrailing(pen, NEGATIVE_PROMPT + ".");
+      // anchor
+      if (anchor_en) pen = injectAnchors(pen, anchor_en);
+
+      s.prompt_en = pen;
+
+      // 日本語訳が空なら英語からの注釈訳だけでも入れる（簡易フォールバック）
+      let pja = (s.prompt_ja ?? "").trim();
+      if (!pja) {
+        pja = "（英語プロンプト参照）一貫性: 同じ人物・同じ店舗・同じ配色を維持。";
+      }
+      s.prompt_ja = pja;
+
+      return s;
+    });
+
+    // 2) style_guide の最低限保証
+    const sg = content.style_guide ?? {};
+    sg.style_id = sg.style_id ?? "COFFEE_CM_STYLE_001";
+    sg.camera_lens = sg.camera_lens ?? "50mm";
+    sg.lighting_en = sg.lighting_en ?? "warm soft lighting, golden hour";
+    sg.lighting_ja = sg.lighting_ja ?? "暖かいソフトな光、ゴールデンアワーの雰囲気";
+    sg.palette = sg.palette ?? { primary: "#C19A6B", secondary: "#6B4F3A", accents: ["#F2E6D8"] };
+    if (!Array.isArray(sg.characters) || sg.characters.length === 0) {
+      sg.characters = [{
+        id: "CHAR_A",
+        name: "Lead Barista",
+        age: "30s",
+        gender: "unspecified",
+        look_en: "friendly barista with short dark hair",
+        look_ja: "短めの黒髪の親しみやすいバリスタ",
+        wardrobe_en: "navy apron, white shirt",
+        wardrobe_ja: "ネイビーのエプロンと白シャツ"
+      }];
+    }
+    if (!Array.isArray(sg.locations) || sg.locations.length === 0) {
+      sg.locations = [{
+        id: "LOC_A",
+        name: `${shopName} Interior`,
+        look_en: "modern cozy coffee shop interior with wooden tables and large window",
+        look_ja: "木のテーブルと大きな窓があるモダンで居心地の良い店内"
+      }];
+    }
 
     const output = {
-      meta: { 
-        platform, 
+      meta: {
+        platform,
         aspect: config.aspect,
         duration: config.duration,
+        distribution: config.distribution,
         shopName,
-        vibe 
+        vibe
       },
-      scenes: result.scenes
-    }
+      style_guide: sg,
+      anchor_en: content.anchor_en ?? "consistent look: same barista CHAR_A at LOC_A with brand palette.",
+      anchor_ja: content.anchor_ja ?? "一貫性: CHAR_A（同じバリスタ）とLOC_A（同じ店舗）とブランド配色を維持。",
+      scenes: fixedScenes
+    };
 
-    return new Response(
-      JSON.stringify(output),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
-    )
-  } catch (error) {
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        }, 
-        status: 400 
-      }
-    )
+    return new Response(JSON.stringify(output), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
+    });
+
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400
+    });
   }
-})
+});

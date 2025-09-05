@@ -28,13 +28,44 @@ export interface RunwayContent {
     platform: Platform
     aspect: string
     duration: number
+    distribution: number[]
     shopName: string
     vibe: string
   }
+  style_guide: {
+    style_id: string
+    characters: Array<{
+      id: string
+      name?: string
+      age?: string
+      gender?: string
+      look_en?: string
+      look_ja?: string
+      wardrobe_en?: string
+      wardrobe_ja?: string
+    }>
+    locations: Array<{
+      id: string
+      name?: string
+      look_en?: string
+      look_ja?: string
+    }>
+    palette: {
+      primary?: string
+      secondary?: string
+      accents?: string[]
+    }
+    camera_lens: string
+    lighting_en: string
+    lighting_ja: string
+  }
+  anchor_en: string
+  anchor_ja: string
   scenes: Array<{
     label: string
     seconds: number
     prompt_en: string
+    prompt_ja: string
   }>
 }
 

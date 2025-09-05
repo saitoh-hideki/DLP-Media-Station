@@ -20,6 +20,7 @@ export default function RunwayGenerator({ onGenerated }: RunwayGeneratorProps) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<RunwayContent | null>(null)
   const [error, setError] = useState('')
+  const [showStyleGuide, setShowStyleGuide] = useState(false)
 
   const handleGenerate = async () => {
     setLoading(true)
@@ -147,7 +148,16 @@ export default function RunwayGenerator({ onGenerated }: RunwayGeneratorProps) {
 
         {result && (
           <div className="space-y-4 pt-4 border-t">
-            <h3 className="font-semibold">生成結果</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">生成結果</h3>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowStyleGuide(!showStyleGuide)}
+              >
+                {showStyleGuide ? 'スタイルガイドを隠す' : 'スタイルガイドを表示'}
+              </Button>
+            </div>
             
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-4">
@@ -156,6 +166,76 @@ export default function RunwayGenerator({ onGenerated }: RunwayGeneratorProps) {
                 <span className="text-gray-500">シーン数: {result.scenes.length}</span>
               </div>
             </div>
+
+            {/* スタイルガイド表示 */}
+            {showStyleGuide && (
+              <div className="bg-purple-50 p-4 rounded-lg space-y-3">
+                <h4 className="font-medium text-purple-900">スタイルガイド</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h5 className="font-medium text-purple-800 mb-2">キャラクター</h5>
+                    {result.style_guide.characters.map((char, i) => (
+                      <div key={i} className="mb-2 p-2 bg-white rounded">
+                        <div className="font-medium">{char.name} ({char.age})</div>
+                        <div className="text-gray-600">{char.look_ja}</div>
+                        <div className="text-gray-500">{char.wardrobe_ja}</div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div>
+                    <h5 className="font-medium text-purple-800 mb-2">ロケーション</h5>
+                    {result.style_guide.locations.map((loc, i) => (
+                      <div key={i} className="mb-2 p-2 bg-white rounded">
+                        <div className="font-medium">{loc.name}</div>
+                        <div className="text-gray-600">{loc.look_ja}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <h5 className="font-medium text-purple-800 mb-1">カラーパレット</h5>
+                    <div className="flex gap-2">
+                      {result.style_guide.palette.primary && (
+                        <div 
+                          className="w-6 h-6 rounded border"
+                          style={{ backgroundColor: result.style_guide.palette.primary }}
+                          title={result.style_guide.palette.primary}
+                        />
+                      )}
+                      {result.style_guide.palette.secondary && (
+                        <div 
+                          className="w-6 h-6 rounded border"
+                          style={{ backgroundColor: result.style_guide.palette.secondary }}
+                          title={result.style_guide.palette.secondary}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h5 className="font-medium text-purple-800 mb-1">カメラレンズ</h5>
+                    <div className="text-gray-600">{result.style_guide.camera_lens}</div>
+                  </div>
+                  
+                  <div>
+                    <h5 className="font-medium text-purple-800 mb-1">ライティング</h5>
+                    <div className="text-gray-600">{result.style_guide.lighting_ja}</div>
+                  </div>
+                </div>
+                
+                <div className="bg-white p-3 rounded">
+                  <h5 className="font-medium text-purple-800 mb-1">一貫性アンカー</h5>
+                  <div className="text-sm text-gray-600">
+                    <div><strong>英語:</strong> {result.anchor_en}</div>
+                    <div><strong>日本語:</strong> {result.anchor_ja}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               {result.scenes.map((scene: any, index: number) => (
